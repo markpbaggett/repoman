@@ -6,75 +6,81 @@ from rdflib import URIRef, Graph
 class FedoraWork(FedoraObject):
     def __init__(self, uri):
         super().__init__(uri)
+        self.uri = URIRef(uri)
         self.descriptive_metadata = self.__get_descriptive_metadata()
-        self.rights = self.__get_rights()
-        self.title = self.__get_title()
-        self.summary = self.__get_summary()
-        self.members = self.__get_members()
-        self.iana_first = list(self.content.objects(
-            subject=URIRef(uri), predicate=URIRef(f"{self.namespaces.iana}first")
-        ))[0]
-        self.iana_last = list(self.content.objects(
-            subject=URIRef(uri), predicate=URIRef(f"{self.namespaces.iana}last")
-        ))[0]
+        self._cache = {}
+        self.iana_first = self.__get_iana('first')
+        self.iana_last = self.__get_iana('last')
+
+    def __get_iana(self, name):
+        return next(self.content.objects(subject=self.uri, predicate=URIRef(f"{self.namespaces.iana}{name}")), None)
 
     def __get_descriptive_metadata(self):
         """Builds a graph with just known descriptive metadata."""
         description = Graph()
-        descriptive_predicates = (
-            URIRef(f"{self.namespaces.dc}subject"),
-            URIRef(f"{self.namespaces.dc}creator"),
-            URIRef(f"{self.namespaces.dc}description"),
-            URIRef(f"{self.namespaces.dc}format"),
-            URIRef(f"{self.namespaces.dc}language"),
-            URIRef(f"{self.namespaces.dc}publisher"),
-            URIRef(f"{self.namespaces.dc}title"),
-            URIRef(f"{self.namespaces.dc}type"),
-            URIRef(f"{self.namespaces.dcterms}alternative"),
-            URIRef(f"{self.namespaces.dcterms}created"),
-            URIRef(f"{self.namespaces.dcterms}extent"),
-            URIRef(f"{self.namespaces.dcterms}isPartOf"),
-            URIRef(f"{self.namespaces.dcterms}medium"),
-        )
+        descriptive_predicates = {
+            f"{self.namespaces.dc}subject",
+            f"{self.namespaces.dc}creator",
+            f"{self.namespaces.dc}description",
+            f"{self.namespaces.dc}format",
+            f"{self.namespaces.dc}language",
+            f"{self.namespaces.dc}publisher",
+            f"{self.namespaces.dc}title",
+            f"{self.namespaces.dc}type",
+            f"{self.namespaces.dcterms}alternative",
+            f"{self.namespaces.dcterms}created",
+            f"{self.namespaces.dcterms}extent",
+            f"{self.namespaces.dcterms}isPartOf",
+            f"{self.namespaces.dcterms}medium",
+        }
         for s, p, o in self.content:
-            if p in descriptive_predicates:
+            if str(p) in descriptive_predicates:
                 description.add((s, p, o))
         return description
 
-    def __get_rights(self):
-        for s, p, o in self.content:
-            if p == URIRef(f"{self.namespaces.dc}rights"):
+    def __get_cached(self, key, func):
+        """Helper to cache expensive operations."""
+        if key not in self._cache:
+            self._cache[key] = func()
+        return self._cache[key]
+
+    @property
+    def rights(self):
+        return self.__get_cached('rights', lambda: self.__get_first_literal(f"{self.namespaces.dc}rights"))
+
+    @property
+    def title(self):
+        return self.__get_cached('title', lambda: self.__get_all_literals(f"{self.namespaces.dc}title"))
+
+    @property
+    def summary(self):
+        return self.__get_cached('summary', lambda: self.__get_first_literal(f"{self.namespaces.dc}description"))
+
+    @property
+    def members(self):
+        return self.__get_cached('members', lambda: self.__get_all_objects(f"{self.namespaces.pcdm}hasMember"))
+
+    def __get_first_literal(self, predicate):
+        for _, p, o in self.content:
+            if str(p) == predicate:
                 return str(o)
-
-    def __get_title(self):
-        titles = []
-        for s, p, o in self.content:
-            if p == URIRef(f"{self.namespaces.dc}title"):
-                titles.append(str(o.value))
-        return titles
-
-    def __get_summary(self):
-        for s, p, o in self.content:
-            if p == URIRef(f"{self.namespaces.dc}description"):
-                return str(o.value)
         return ""
 
-    def __get_members(self):
-        return [
-            str(o) for s, p, o in self.content if p == URIRef(f"{self.namespaces.pcdm}hasMember")
-        ]
+    def __get_all_literals(self, predicate):
+        return [str(o) for _, p, o in self.content if str(p) == predicate]
+
+    def __get_all_objects(self, predicate):
+        return [str(o) for _, p, o in self.content if str(p) == predicate]
 
     def get_ordered_members(self):
         ordered_members = []
-        keep_going = True
         current = FedoraProxy(uri=str(self.iana_first))
-        while keep_going:
+        while current:
             ordered_members.append(current.get_proxy_for())
             if current.has_iana_next:
-                new_uri = str(current.get_next())
-                current = FedoraProxy(uri=new_uri)
+                current = FedoraProxy(uri=str(current.get_next()))
             else:
-                keep_going = False
+                current = None
         return ordered_members
 
     def metadata_to_dict(self):
@@ -92,33 +98,27 @@ class FedoraWork(FedoraObject):
             "Language": [],
             "Extent": []
         }
+
+        predicates_map = {
+            "Creator": f"{self.namespaces.dc}creator",
+            "Subject": f"{self.namespaces.dc}subject",
+            "Description": f"{self.namespaces.dc}description",
+            "Language": f"{self.namespaces.dc}language",
+            "Type": f"{self.namespaces.dc}type",
+            "Format": f"{self.namespaces.dc}format",
+            "Publisher": f"{self.namespaces.dc}publisher",
+            "Date Created": f"{self.namespaces.dcterms}created",
+            "Collection": f"{self.namespaces.dcterms}isPartOf",
+            "Medium": f"{self.namespaces.dcterms}medium",
+            "Extent": f"{self.namespaces.dcterms}extent",
+            "Alternative Title": f"{self.namespaces.dcterms}alternative"
+        }
+
         for s, p, o in self.descriptive_metadata:
-            if p == URIRef(f"{self.namespaces.dc}creator"):
-                description['Creator'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dc}subject"):
-                description['Subject'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dc}description"):
-                description['Description'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dc}language"):
-                description['Language'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dc}type"):
-                description['Type'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dc}format"):
-                description['Format'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dc}publisher"):
-                description['Publisher'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dc}type"):
-                description['Type'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dcterms}created"):
-                description['Date Created'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dcterms}isPartOf"):
-                description['Collection'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dcterms}medium"):
-                description['Medium'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dcterms}extent"):
-                description['Extent'].append(str(o.value))
-            elif p == URIRef(f"{self.namespaces.dcterms}alternative"):
-                description['Alternative Title'].append(str(o.value))
+            for key, pred in predicates_map.items():
+                if str(p) == pred:
+                    description[key].append(str(o))
+
         return description
 
 
