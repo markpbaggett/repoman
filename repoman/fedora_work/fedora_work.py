@@ -124,5 +124,6 @@ class FedoraWork(FedoraObject):
 
 if __name__ == '__main__':
     x = FedoraWork(
-        'https://api.library.tamu.edu/fcrepo/rest/3b/6f/c3/25/3b6fc325-f6ca-41d8-b91e-8c5db3be8c13/london-collection_objects/11'
+        'https://api.library.tamu.edu/fcrepo/rest/3b/6f/c3/25/3b6fc325-f6ca-41d8-b91e-8c5db3be8c13/london-collection_objects/9'
     )
+

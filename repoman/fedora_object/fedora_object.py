@@ -1,5 +1,5 @@
 import httpx
-from rdflib import Graph
+from rdflib import Graph, Namespace
 
 
 class Namespaces:
@@ -24,13 +24,28 @@ class FedoraObject:
         headers = {
             'Accept': 'application/ld+json'
         }
-        r = httpx.get(self.uri, headers=headers)
-        if r.status_code == 200:
-            g = Graph()
-            g.parse(data=r.content, format='json-ld')
-            return g
-        else:
-            raise Exception(f"Failed to download {self.uri}. Status code: {r.status_code}")
+        r = httpx.get(self.uri, headers=headers, timeout=60)
+        try:
+            if r.status_code == 200:
+                g = Graph()
+                g.parse(data=r.content, format='json-ld')
+                return g
+            else:
+                raise Exception(f"Failed to download {self.uri}. Status code: {r.status_code}")
+        except:
+            print(r.status_code)
+
+    def serialize(self, format="turtle"):
+        PCDM = Namespace("http://pcdm.org/models#")
+        LDP = Namespace("http://www.w3.org/ns/ldp#")
+        IANA = Namespace("http://www.iana.org/assignments/relation/")
+        FCREPO = Namespace("http://fedora.info/definitions/v4/repository#")
+        self.content.bind('pcdm', PCDM)
+        self.content.bind('ldp', LDP)
+        self.content.bind('iana', IANA)
+        self.content.bind('fedora', FCREPO)
+        data = self.content.serialize(format=format)
+        return data
 
     def read_graph(self):
         for s, p, o in self.content:
