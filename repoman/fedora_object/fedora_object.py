@@ -40,10 +40,16 @@ class FedoraObject:
         LDP = Namespace("http://www.w3.org/ns/ldp#")
         IANA = Namespace("http://www.iana.org/assignments/relation/")
         FCREPO = Namespace("http://fedora.info/definitions/v4/repository#")
+        ORE = Namespace("http://www.openarchives.org/ore/terms#")
+        PREMIS = Namespace("http://www.loc.gov/premis/rdf/v1#")
+        EBUCORE = Namespace("http://www.ebu.ch/metadata/ontologies/ebucore/ebucore#")
         self.content.bind('pcdm', PCDM)
         self.content.bind('ldp', LDP)
         self.content.bind('iana', IANA)
         self.content.bind('fedora', FCREPO)
+        self.content.bind('ore', ORE)
+        self.content.bind('premis', PREMIS)
+        self.content.bind('ebucore', EBUCORE)
         data = self.content.serialize(format=format)
         return data
 
